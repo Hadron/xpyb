@@ -1,0 +1,17 @@
+Package: python-xpyb-doc
+Source: xpyb
+Version: 1.3.1-1+kdienes2
+Architecture: all
+Maintainer: Julien Danjou <acid@debian.org>
+Installed-Size: 27
+Section: doc
+Priority: optional
+Homepage: http://xcb.freedesktop.org
+Description: Python bindings to XCB (common documentation)
+ This module provides Python binding to libxcb, the X C Bindings library.
+ .
+ It provides an interface to the X Window System protocol, designed to replace
+ the Xlib interface, featuring latency hiding, small size, direct protocol
+ access and thread support.
+ .
+ This is the common documentation package.

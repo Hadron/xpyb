@@ -1,0 +1,18 @@
+Package: python3-xpyb
+Source: xpyb
+Version: 1.3.1-1+kdienes2
+Architecture: amd64
+Maintainer: Julien Danjou <acid@debian.org>
+Installed-Size: 25
+Suggests: python-xpyb-doc
+Section: python
+Priority: optional
+Homepage: http://xcb.freedesktop.org
+Description: Python bindings to XCB (Python 3)
+ This module provides Python binding to libxcb, the X C Bindings library.
+ .
+ It provides an interface to the X Window System protocol, designed to replace
+ the Xlib interface, featuring latency hiding, small size, direct protocol
+ access and thread support.
+ .
+ This is the Python 3 version of the package.

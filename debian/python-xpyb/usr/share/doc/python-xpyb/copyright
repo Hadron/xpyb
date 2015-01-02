@@ -1,0 +1,19 @@
+This work was packaged for Debian by:
+
+    Julien Danjou <acid@debian.org> on Wed, 23 Dec 2009 13:55:02 +0100
+
+It was downloaded from <http://xcb.freedesktop.org/dist/>
+
+Upstream Author:
+
+    Eamon Walsh <efw@eamonwalsh.com>
+
+License:
+
+    This code is licensed under public domain.
+
+The Debian packaging is:
+
+    Copyright (C) 2009 Julien Danjou <acid@debian.org>
+
+    Licensed under public domain.

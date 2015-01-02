@@ -1,0 +1,62 @@
+#!/usr/bin/make -f
+
+# PYTHON_VERSION=$(shell pyversions -s)
+
+export PYBUILD_VERSIONS=2.7
+export PYBUILD_INTERPRETERS=python2.7
+
+export PYBUILD_NAME=xpyb
+export PYBUILD_SYSTEM=custom
+
+BUILDFLAGS=$(shell dpkg-buildflags --export=configure)
+
+export PYBUILD_CLEAN_ARGS=rm -rf {build_dir}
+export PYBUILD_CONFIGURE_ARGS=mkdir -p {build_dir} && cd {build_dir} && ../../../configure PYTHON=python{version} --enable-xinput --prefix=/usr $(BUILDFLAGS)
+export PYBUILD_BUILD_ARGS=make -C {build_dir}
+export PYBUILD_INSTALL_ARGS=make -C {build_dir} DESTDIR={destdir} includedir=$(PYTHON_INCLUDE) install
+
+
+%:
+	dh $@ --with python2,python3 --buildsystem=pybuild
+
+override_dh_auto_configure:
+	autoreconf -vfi
+	dh_auto_configure
+
+override_dh_auto_install:
+	dh_auto_install
+	rm -r debian/python-xpyb/usr/share/doc/xpyb
+	mkdir -p debian/python-xpyb-doc/usr/share/doc/
+	rm -r debian/python-xpyb/usr/lib/pkgconfig
+
+Xoverride_dh_auto_configure:
+	for py in $(PYTHON_VERSION); do \
+		mkdir build-$$py; \
+		cd build-$$py; \
+		../configure PYTHON=$$py --enable-xinput --prefix=/usr; \
+		cd $(CURDIR); \
+	done
+
+Xoverride_dh_makeshlibs:
+
+Xoverride_dh_auto_build:
+	for py in $(PYTHON_VERSION); do \
+		make -C build-$$py; \
+	done
+
+Xoverride_dh_auto_install:
+	for py in $(PYTHON_VERSION); do \
+		make -C build-$$py DESTDIR=$(CURDIR)/debian/python-xpyb install; \
+		rm -rf debian/python-xpyb/usr/lib/$$py/dist-packages/xcb/xcb.la ; \
+	done
+
+Xoverride_dh_auto_clean:
+	for py in $(PYTHON_VERSION); do \
+		rm -rf build-$$py; \
+	done
+	dh_auto_clean
+
+Xoverride_dh_install:
+	rm -f debian/python-xpyb/usr/share/doc/xpyb/COPYING
+	dh_install
+

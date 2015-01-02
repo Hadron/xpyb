@@ -1,0 +1,38 @@
+xpyb (1.3.1-1+kdienes2) unstable; urgency=medium
+
+  * Fix xproto.RECTANGLE.
+
+ -- Klee Dienes <klee@mit.edu>  Sat, 23 Aug 2014 23:12:46 -0400
+
+xpyb (1.3.1-1+kdienes1) unstable; urgency=medium
+
+  * Add xinput.
+
+ -- Klee Dienes <klee@mit.edu>  Sat, 12 Jul 2014 19:42:51 -0400
+
+xpyb (1.3.1-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Julien Danjou <acid@debian.org>  Fri, 23 Mar 2012 23:49:27 +0100
+
+xpyb (1.3-1) unstable; urgency=low
+
+  * New upstream release (Closes: #645672)
+  * Bump standards-version
+  * Use dh_python2
+  * Do not provide .la file
+
+ -- Julien Danjou <acid@debian.org>  Thu, 22 Mar 2012 22:53:04 +0100
+
+xpyb (1.2-2) unstable; urgency=low
+
+  * Add support for multiple Python version (Closes: #566355)
+
+ -- Julien Danjou <acid@debian.org>  Mon, 23 Jan 2010 09:14:11 +0100
+
+xpyb (1.2-1) unstable; urgency=low
+
+  * Initial release (Closes: #546568)
+
+ -- Julien Danjou <acid@debian.org>  Wed, 23 Dec 2009 13:55:02 +0100
