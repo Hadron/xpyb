@@ -1,0 +1,1237 @@
+From: Klee Dienes <klee.dienes@hadronindustries.com>
+Date: Sat, 3 Jan 2015 16:48:58 -0500
+Subject: Other changes.
+
+---
+ configure.ac     |   2 +-
+ src/__init__.py  |   7 +++-
+ src/conn.c       |  28 +++++++++------
+ src/cookie.c     |  33 +++++++-----------
+ src/error.c      |  12 +++++--
+ src/event.c      |   4 +--
+ src/ext.c        |  24 ++++++++++++-
+ src/extkey.c     |  15 ++++-----
+ src/extkey.h     |   2 +-
+ src/iter.c       |  18 ++++++++--
+ src/list.c       |  81 ++++++++++++++++++++++++++++++++++++++------
+ src/module.c     |  81 ++++++++++++++++++++++++++++++--------------
+ src/module.h     |  17 +++++++++-
+ src/protobj.c    | 101 +++++++++++++++++++++++++++++++++++++++++++------------
+ src/py_client.py |  79 ++++++++++++++++++++++++++++++++-----------
+ src/reply.c      |  13 ++++---
+ src/request.c    |   2 +-
+ src/response.c   |  13 ++++---
+ 18 files changed, 395 insertions(+), 137 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 610433e..ec82b54 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -17,7 +17,7 @@ AM_INIT_AUTOMAKE([foreign dist-bzip2])
+ AM_PATH_PYTHON([2.5])
+ AC_MSG_CHECKING([for python include dir])
+ PYTHON_INCLUDE=`$PYTHON -c "from distutils import sysconfig; \
+-			    print sysconfig.get_python_inc()"`
++			    print(sysconfig.get_python_inc())"`
+ if test -z "${PYTHON_INCLUDE}"; then
+    AC_MSG_ERROR([Failed to find Python include directory.
+ 		 Check your Python installation.])
+diff --git a/src/__init__.py b/src/__init__.py
+index 6079b72..d2b6b4a 100644
+--- a/src/__init__.py
++++ b/src/__init__.py
+@@ -1,3 +1,8 @@
+-from xcb import *
++import sys
++
++if sys.version_info[0] < 3:
++    from xcb import *
++else:
++    from xcb.xcb import *
+ 
+ __all__ = [ 'xproto', 'bigreq', 'xc_misc' ]
+diff --git a/src/conn.c b/src/conn.c
+index 8891c2d..b9c5345 100644
+--- a/src/conn.c
++++ b/src/conn.c
+@@ -154,6 +154,10 @@ xpybConn_load_ext(xpybConn *self, PyObject *key)
+     return ext;
+ }
+ 
++#if PY_MAJOR_VERSION < 3
++#define PyLong_AS_LONG(x) PyInt_AS_LONG(x)
++#endif
++
+ static int
+ xpybConn_setup_helper(xpybConn *self, xpybExt *ext, PyObject *events, PyObject *errors)
+ {
+@@ -162,7 +166,7 @@ xpybConn_setup_helper(xpybConn *self, xpybExt *ext, PyObject *events, PyObject *
+     PyObject *num, *type, **newmem;
+ 
+     while (PyDict_Next(events, &j, &num, &type)) {
+-	opcode = ext->first_event + PyInt_AS_LONG(num);
++	opcode = ext->first_event + PyLong_AS_LONG(num);
+ 	if (opcode >= self->events_len) {
+ 	    newlen = opcode + 1;
+ 	    newmem = realloc(self->events, newlen * sizeof(PyObject *));
+@@ -177,7 +181,7 @@ xpybConn_setup_helper(xpybConn *self, xpybExt *ext, PyObject *events, PyObject *
+ 
+     j = 0;
+     while (PyDict_Next(errors, &j, &num, &type)) {
+-	opcode = ext->first_error + PyInt_AS_LONG(num);
++	opcode = ext->first_error + PyLong_AS_LONG(num);
+ 	if (opcode >= self->errors_len) {
+ 	    newlen = opcode + 1;
+ 	    newmem = realloc(self->errors, newlen * sizeof(PyObject *));
+@@ -258,22 +262,27 @@ xpybConn_dealloc(xpybConn *self)
+ 
+     free(self->events);
+     free(self->errors);
+-    self->ob_type->tp_free((PyObject *)self);
++    Py_TYPE(self)->tp_free((PyObject *)self);
+ }
+ 
++#if PY_MAJOR_VERSION >= 3
++#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
++#else
++#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
++#endif
++
+ static PyObject *
+ xpybConn_getattro(xpybConn *self, PyObject *obj)
+ {
+-    const char *name = PyString_AS_STRING(obj);
+     PyMethodDef *mptr = xpybConn_type.tp_methods;
+     PyMemberDef *sptr = xpybConn_type.tp_members;
+     PyObject *result;
+ 
+     while (mptr && mptr->ml_name)
+-	if (strcmp(name, (mptr++)->ml_name) == 0)
++	if (Py_CompareWithASCIIString(obj, (mptr++)->ml_name) == 0)
+ 	    goto out2;
+     while (sptr && sptr->name)
+-	if (strcmp(name, (sptr++)->name) == 0)
++	if (Py_CompareWithASCIIString(obj, (sptr++)->name) == 0)
+ 	    goto out2;
+ 	
+     Py_XINCREF(result = PyDict_GetItem(self->dict, obj));
+@@ -288,15 +297,14 @@ out2:
+ static int
+ xpybConn_setattro(xpybConn *self, PyObject *obj, PyObject *val)
+ {
+-    const char *name = PyString_AS_STRING(obj);
+     PyMethodDef *mptr = xpybConn_type.tp_methods;
+     PyMemberDef *sptr = xpybConn_type.tp_members;
+ 
+     while (mptr && mptr->ml_name)
+-	if (strcmp(name, (mptr++)->ml_name) == 0)
++	if (Py_CompareWithASCIIString(obj, (mptr++)->ml_name) == 0)
+ 	    goto out2;
+     while (sptr && sptr->name)
+-	if (strcmp(name, (sptr++)->name) == 0)
++	if (Py_CompareWithASCIIString(obj, (sptr++)->name) == 0)
+ 	    goto out2;
+ 
+     return val ? PyDict_SetItem(self->dict, obj, val) : PyDict_DelItem(self->dict, obj);
+@@ -410,7 +418,7 @@ xpybConn_get_setup(xpybConn *self, PyObject *args)
+ 
+     if (self->setup == NULL) {
+ 	s = xcb_get_setup(self->conn);
+-	shim = PyBuffer_FromMemory((void *)s, 8 + s->length * 4);
++	shim = PyMemoryView_FromMemory((void *)s, 8 + s->length * 4, 'B');
+ 	if (shim == NULL)
+ 	    return NULL;
+ 	type = (PyObject *)xpybModule_setup;
+diff --git a/src/cookie.c b/src/cookie.c
+index b612a66..70c4758 100644
+--- a/src/cookie.c
++++ b/src/cookie.c
+@@ -4,6 +4,7 @@
+ #include "cookie.h"
+ #include "error.h"
+ #include "reply.h"
++#include "ext.h"
+ 
+ /*
+  * Helpers
+@@ -29,7 +30,7 @@ xpybCookie_dealloc(xpybCookie *self)
+     Py_CLEAR(self->reply_type);
+     Py_CLEAR(self->request);
+     Py_CLEAR(self->conn);
+-    self->ob_type->tp_free((PyObject *)self);
++    Py_TYPE(self)->tp_free((PyObject *)self);
+ }
+ 
+ 
+@@ -66,9 +67,8 @@ xpybCookie_reply(xpybCookie *self, PyObject *args)
+ {
+     xcb_generic_error_t *error;
+     xcb_generic_reply_t *data;
+-    PyObject *shim, *reply;
+-    void *buf;
+-    Py_ssize_t len;
++    PyObject *memoryview;
++    PyObject *reply;
+ 
+     /* Check arguments and connection. */
+     if (self->request->is_void) {
+@@ -83,29 +83,20 @@ xpybCookie_reply(xpybCookie *self, PyObject *args)
+     if (xpybError_set(self->conn, error))
+ 	return NULL;
+     if (data == NULL) {
+-	PyErr_SetString(PyExc_IOError, "I/O error on X server connection.");
++	PyErr_SetString(PyExc_IOError, "Error reading reply from X server connection.");
+ 	return NULL;
+     }
+ 
+-    /* Create a shim protocol object */
+-    shim = PyBuffer_New(32 + data->length * 4);
+-    if (shim == NULL)
+-	goto err1;
+-    if (PyObject_AsWriteBuffer(shim, &buf, &len) < 0)
+-        goto err2;
+-    memcpy(buf, data, len);
+-    free(data);
++    memoryview = PyMemoryView_FromMemory((void *) data, 32 + data->length * 4, 'B');
++    // free(data);
++
++    if (memoryview == NULL)
++        return NULL;
+ 
+     /* Call the reply type object to get a new xcb.Reply instance */
+-    reply = PyObject_CallFunctionObjArgs((PyObject *)self->reply_type, shim, NULL);
+-    Py_DECREF(shim);
++    reply = PyObject_CallFunctionObjArgs((PyObject *)self->reply_type, memoryview, NULL);
++    Py_DECREF(memoryview);
+     return reply;
+-
+-err2:
+-    Py_DECREF(shim);
+-err1:
+-    free(data);
+-    return NULL;
+ }
+ 
+ static PyMethodDef xpybCookie_methods[] = {
+diff --git a/src/error.c b/src/error.c
+index a481f5c..62b02d7 100644
+--- a/src/error.c
++++ b/src/error.c
+@@ -2,6 +2,7 @@
+ #include "except.h"
+ #include "response.h"
+ #include "error.h"
++#include "ext.h"
+ 
+ /*
+  * Helpers
+@@ -23,7 +24,7 @@ xpybError_set(xpybConn *conn, xcb_generic_error_t *e)
+ 	    except = PyTuple_GET_ITEM(conn->errors[opcode], 1);
+ 	}
+ 
+-	shim = PyBuffer_FromMemory(e, sizeof(*e));
++	shim = PyMemoryView_FromMemory((void *) e, sizeof(*e), 'B');
+ 	if (shim == NULL)
+ 	    return 1;
+ 
+@@ -46,17 +47,22 @@ xpybError_set(xpybConn *conn, xcb_generic_error_t *e)
+  * Members
+  */
+ 
++#if PY_MAJOR_VERSION >= 3
++#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
++#else
++#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
++#endif
++
+ static PyObject *
+ xpybError_getattro(PyObject *self, PyObject *obj)
+ {
+-    const char *name = PyString_AS_STRING(obj);
+     const xcb_generic_error_t *data;
+     Py_ssize_t size;
+ 
+     if (PyObject_AsReadBuffer(self, (const void **)&data, &size) < 0)
+ 	return NULL;
+ 
+-    if (strcmp(name, "code") == 0)
++    if (Py_CompareWithASCIIString(obj, "code") == 0)
+ 	return Py_BuildValue("B", data->error_code);
+ 
+     return xpybError_type.tp_base->tp_getattro(self, obj);
+diff --git a/src/event.c b/src/event.c
+index 2ab7eac..7448052 100644
+--- a/src/event.c
++++ b/src/event.c
+@@ -16,7 +16,7 @@ xpybEvent_create(xpybConn *conn, xcb_generic_event_t *e)
+     if (opcode < conn->events_len && conn->events[opcode] != NULL)
+ 	type = conn->events[opcode];
+ 
+-    shim = PyBuffer_FromMemory(e, sizeof(*e));
++    shim = PyMemoryView_FromMemory((void *) e, sizeof(*e), 'B');
+     if (shim == NULL)
+ 	return NULL;
+ 
+@@ -41,7 +41,7 @@ xpybEvent_create(xpybConn *conn, xcb_generic_event_t *e)
+  */
+ 
+ PyTypeObject xpybEvent_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Event",
+     .tp_basicsize = sizeof(xpybEvent),
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+diff --git a/src/ext.c b/src/ext.c
+index 6475850..8bc862c 100644
+--- a/src/ext.c
++++ b/src/ext.c
+@@ -6,6 +6,7 @@
+ #include "cookie.h"
+ #include "reply.h"
+ #include "request.h"
++#include "memoryobject.h"
+ 
+ /*
+  * Helpers
+@@ -154,13 +155,34 @@ static PyMethodDef xpybExt_methods[] = {
+     { NULL } /* terminator */
+ };
+ 
++#if PY_MAJOR_VERSION < 3
++PyObject *
++PyMemoryView_FromMemory(char *mem, Py_ssize_t size, int flags)
++{
++  PyObject *buf = PyBuffer_FromMemory(mem, size);
++  return buf;
++}
++#endif
++
++#if PY_MAJOR_VERSION >= 3
++PyObject *
++PyBuffer_FromObject(PyObject *object, Py_ssize_t offset, Py_ssize_t size)
++{
++  PyObject *view = PyMemoryView_FromObject(object);
++  Py_buffer *buf = PyMemoryView_GET_BUFFER(view);
++  if (size == -1) {
++    size = buf->len * buf->itemsize;
++  }
++  return PyMemoryView_FromMemory(((char *) buf->buf) + offset, size, PyBUF_READ);
++}
++#endif
+ 
+ /*
+  * Definition
+  */
+ 
+ PyTypeObject xpybExt_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Extension",
+     .tp_basicsize = sizeof(xpybExt),
+     .tp_init = (initproc)xpybExt_init,
+diff --git a/src/extkey.c b/src/extkey.c
+index 5492cb9..7a775ff 100644
+--- a/src/extkey.c
++++ b/src/extkey.c
+@@ -20,27 +20,26 @@ xpybExtkey_new(PyTypeObject *self, PyObject *args, PyObject *kw)
+ static int
+ xpybExtkey_init(xpybExtkey *self, PyObject *args)
+ {
+-    PyStringObject *name;
+-
+-    if (!PyArg_ParseTuple(args, "S", &name))
++    if (!PyArg_ParseTuple(args, "s", &self->key.name))
++	return -1;
++    if (!PyArg_ParseTuple(args, "O", &self->name))
+ 	return -1;
+ 
+-    Py_INCREF(self->name = name);
+-    self->key.name = PyString_AS_STRING(name);
++    Py_INCREF(self->name);
+     return 0;
+ }
+ 
+ static long
+ xpybExtkey_hash(xpybExtkey *self)
+ {
+-    return PyString_Type.tp_hash((PyObject *)self->name);
++    return PyUnicode_Type.tp_hash((PyObject *)self->name);
+ }
+ 
+ static void
+ xpybExtkey_dealloc(xpybExtkey *self)
+ {
+     Py_CLEAR(self->name);
+-    self->ob_type->tp_free((PyObject *)self);
++    Py_TYPE(self)->tp_free((PyObject *)self);
+ }
+ 
+ 
+@@ -49,7 +48,7 @@ xpybExtkey_dealloc(xpybExtkey *self)
+  */
+ 
+ PyTypeObject xpybExtkey_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.ExtensionKey",
+     .tp_basicsize = sizeof(xpybExtkey),
+     .tp_init = (initproc)xpybExtkey_init,
+diff --git a/src/extkey.h b/src/extkey.h
+index 92a2144..a456c7f 100644
+--- a/src/extkey.h
++++ b/src/extkey.h
+@@ -3,7 +3,7 @@
+ 
+ typedef struct {
+     PyObject_HEAD
+-    PyStringObject *name;
++    PyUnicodeObject *name;
+     xcb_extension_t key;
+ } xpybExtkey;
+ 
+diff --git a/src/iter.c b/src/iter.c
+index f7e7afa..9c3a101 100644
+--- a/src/iter.c
++++ b/src/iter.c
+@@ -10,13 +10,25 @@ static void
+ xpybIter_err(xpybIter *self)
+ {
+     if (self->is_list)
+-	PyErr_Format(xpybExcept_base,
+-		     "Extra items in '%s' list (expect multiple of %d).",
++#if PY_MAJOR_VERSION >= 3
++      PyErr_Format(xpybExcept_base,
++		     "Extra items in '%S' list (expect multiple of %lu).",
++		     self->name, self->groupsize);
++#else
++      PyErr_Format(xpybExcept_base,
++		     "Extra items in '%s' list (expect multiple of %lu).",
+ 		     PyString_AS_STRING(self->name), self->groupsize);
++#endif
+     else
++#if PY_MAJOR_VERSION >= 3
+ 	PyErr_Format(xpybExcept_base,
+-		     "Too few items in '%s' list (expect %d).",
++		     "Too few items in '%S' list (expect %lu).",
++		     self->name, self->groupsize);
++#else
++      PyErr_Format(xpybExcept_base,
++		     "Too few items in '%s' list (expect %lu).",
+ 		     PyString_AS_STRING(self->name), self->groupsize);
++#endif
+ }
+ 
+ static PyObject *
+diff --git a/src/list.c b/src/list.c
+index 19b2551..45e619a 100644
+--- a/src/list.c
++++ b/src/list.c
+@@ -2,14 +2,23 @@
+ #include "except.h"
+ #include "list.h"
+ 
++#include "memoryobject.h"
++#include "unicodeobject.h"
++
+ /*
+  * Helpers
+  */
+ 
++#if PY_MAJOR_VERSION >= 3
++#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
++#else
++#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
++#endif
++
+ static PyObject *
+-xpybList_build(PyObject *str, Py_ssize_t size, const char *data)
++xpybList_build(int type, Py_ssize_t size, const char *data)
+ {
+-    switch (PyString_AS_STRING(str)[0]) {
++  switch (type) {
+     case 'b':
+ 	return Py_BuildValue("b", *data);
+     case 'B':
+@@ -75,11 +84,32 @@ xpybList_init(xpybList *self, PyObject *args, PyObject *kw)
+     cur = offset;
+ 
+     for (i = 0; i < length; i++) {
+-	if (PyString_CheckExact(type)) {
+-	    obj = xpybList_build(type, length, data + cur);
++	if (PyUnicode_CheckExact(type)) {
++	    Py_UNICODE *u = PyUnicode_AS_UNICODE(type);
++	    if (PyUnicode_GET_SIZE(type) != 1) {
++	      	PyErr_SetString(xpybExcept_base, "Invalid format character.");
++		return -1;
++	    }
++	    if (u[0] > 255) {
++	      	PyErr_SetString(xpybExcept_base, "Invalid format character.");
++		return -1;
++	    }
++	    obj = xpybList_build(u[0], length, data + cur);
+ 	    if (obj == NULL)
+ 		return -1;
+ 	    cur += size;
++#if PY_MAJOR_VERSION < 3
++	} else if (PyString_CheckExact(type)) {
++	    char *s = PyString_AS_STRING(type);
++	    if ((s[0] == '\0') || (s[1] != '\0')) {
++	      	PyErr_SetString(xpybExcept_base, "Invalid format character.");
++		return -1;
++	    }
++	    obj = xpybList_build(s[0], length, data + cur);
++	    if (obj == NULL)
++		return -1;
++	    cur += size;
++#endif
+ 	} else if (size > 0) {
+ 	    arglist = Py_BuildValue("(Onn)", parent, cur, size);
+ 	    obj = PyEval_CallObject(type, arglist);
+@@ -143,6 +173,13 @@ xpybList_item(xpybList *self, Py_ssize_t arg)
+     return PyList_Type.tp_as_sequence->sq_item(self->list, arg);
+ }
+ 
++static int
++xpybList_ass_item(xpybList *self, Py_ssize_t arg1, PyObject *arg2)
++{
++    return PyList_Type.tp_as_sequence->sq_ass_item(self->list, arg1, arg2);
++}
++
++#if PY_MAJOR_VERSION < 3
+ static PyObject *
+ xpybList_slice(xpybList *self, Py_ssize_t arg1, Py_ssize_t arg2)
+ {
+@@ -150,16 +187,25 @@ xpybList_slice(xpybList *self, Py_ssize_t arg1, Py_ssize_t arg2)
+ }
+ 
+ static int
+-xpybList_ass_item(xpybList *self, Py_ssize_t arg1, PyObject *arg2)
++xpybList_ass_slice(xpybList *self, Py_ssize_t arg1, Py_ssize_t arg2, PyObject *arg3)
+ {
+-    return PyList_Type.tp_as_sequence->sq_ass_item(self->list, arg1, arg2);
++    return PyList_Type.tp_as_sequence->sq_ass_slice(self->list, arg1, arg2, arg3);
++}
++#endif /* PY_MAJOR_VERSION < 3 */
++
++#if PY_MAJOR_VERSION >= 3
++static PyObject *
++xpybList_subscript(xpybList *self, PyObject *item)
++{
++    return PyList_Type.tp_as_mapping->mp_subscript(self->list, item);
+ }
+ 
+ static int
+-xpybList_ass_slice(xpybList *self, Py_ssize_t arg1, Py_ssize_t arg2, PyObject *arg3)
++xpybList_ass_subscript(xpybList *self, PyObject *item1, PyObject *item2)
+ {
+-    return PyList_Type.tp_as_sequence->sq_ass_slice(self->list, arg1, arg2, arg3);
++    return PyList_Type.tp_as_mapping->mp_ass_subscript(self->list, item1, item2);
+ }
++#endif /* PY_MAJOR_VERSION >= 3 */
+ 
+ static int
+ xpybList_contains(xpybList *self, PyObject *arg)
+@@ -215,16 +261,28 @@ static PySequenceMethods xpybList_seqops = {
+     .sq_concat = (binaryfunc)xpybList_concat,
+     .sq_repeat = (ssizeargfunc)xpybList_repeat,
+     .sq_item = (ssizeargfunc)xpybList_item,
++#if PY_MAJOR_VERSION < 3
+     .sq_slice = (ssizessizeargfunc)xpybList_slice,
++#endif
+     .sq_ass_item = (ssizeobjargproc)xpybList_ass_item,
++#if PY_MAJOR_VERSION < 3
+     .sq_ass_slice = (ssizessizeobjargproc)xpybList_ass_slice,
++#endif
+     .sq_contains = (objobjproc)xpybList_contains,
+     .sq_inplace_concat = (binaryfunc)xpybList_inplace_concat,
+     .sq_inplace_repeat = (ssizeargfunc)xpybList_inplace_repeat
+ };
+ 
++#if PY_MAJOR_VERSION >= 3
++static PyMappingMethods xpybList_mapops = {
++    .mp_length = (lenfunc)xpybList_length,
++    .mp_subscript = (binaryfunc)xpybList_subscript,
++    .mp_ass_subscript = (objobjargproc)xpybList_ass_subscript
++};
++#endif /* PY_MAJOR_VERSION >= 3 */
++
+ PyTypeObject xpybList_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.List",
+     .tp_basicsize = sizeof(xpybList),
+     .tp_new = xpybList_new,
+@@ -233,7 +291,10 @@ PyTypeObject xpybList_type = {
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+     .tp_doc = "XCB generic list object",
+     .tp_methods = xpybList_methods,
+-    .tp_as_sequence = &xpybList_seqops
++    .tp_as_sequence = &xpybList_seqops,
++#if PY_MAJOR_VERSION >= 3
++    .tp_as_mapping = &xpybList_mapops
++#endif
+ };
+ 
+ 
+diff --git a/src/module.c b/src/module.c
+index 18f0228..d6b0101 100644
+--- a/src/module.c
++++ b/src/module.c
+@@ -214,17 +214,17 @@ static PyMethodDef XCBMethods[] = {
+       METH_VARARGS,
+       "Returns number of padding bytes needed for a type size." },
+ 
+-    { "_add_core",
++    { "add_core",
+       (PyCFunction)xpyb_add_core,
+       METH_VARARGS,
+       "Registers the core protocol class.  Not meant for end users." },
+ 
+-    { "_add_ext",
++    { "add_ext",
+       (PyCFunction)xpyb_add_ext,
+       METH_VARARGS,
+       "Registers a new extension protocol class.  Not meant for end users." },
+ 
+-    { "_resize_obj",
++    { "resize_obj",
+       (PyCFunction)xpyb_resize_obj,
+       METH_VARARGS,
+       "Sizes a protocol object after size determination.  Not meant for end users." },
+@@ -240,64 +240,95 @@ static xpyb_CAPI_t CAPI = {
+  * Module init
+  */
+ 
++#if PY_MAJOR_VERSION >= 3
++static struct PyModuleDef moduledef = {
++  PyModuleDef_HEAD_INIT,
++  "xcb",
++  "XCB Python Binding", /* m_doc */
++  -1,                   /* m_size */
++  XCBMethods,		/* m_methods */
++  NULL,			/* m_reload */
++  NULL,			/* m_traverse */
++  NULL,			/* m_clear */
++  NULL,			/* m_free */
++};
++#endif /* PY_MAJOR_VERSION >= 3 */
++
++#if PY_MAJOR_VERSION >= 3
++#define MODRETURN(x) return x
++#else
++#define MODRETURN(x) return
++#endif
++
+ PyMODINIT_FUNC
++#if PY_MAJOR_VERSION >= 3
++PyInit_xcb(void)
++#else
+ initxcb(void) 
++#endif
+ {
+     /* Create module object */
++#if PY_MAJOR_VERSION >= 3
++    PyObject *m = PyModule_Create(&moduledef);
++#else
+     PyObject *m = Py_InitModule3("xcb", XCBMethods, "XCB Python Binding.");
++#endif
++
+     if (m == NULL)
+-	return;
++	MODRETURN(NULL);
+ 
+     /* Create other internal objects */
+     if ((xpybModule_extdict = PyDict_New()) == NULL)
+-	return;
++	MODRETURN(NULL);
+     if ((xpybModule_ext_events = PyDict_New()) == NULL)
+-	return;
++	MODRETURN(NULL);
+     if ((xpybModule_ext_errors = PyDict_New()) == NULL)
+-	return;
++	MODRETURN(NULL);
+ 
+     /* Add integer constants */
+     if (xpybConstant_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+ 
+     /* Set up all the types */
+     if (xpybExcept_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybConn_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybCookie_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+ 
+     if (xpybExtkey_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybExt_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+ 
+     if (xpybProtobj_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybResponse_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybEvent_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybError_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybReply_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybRequest_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybStruct_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybUnion_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+ 
+     if (xpybList_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+     if (xpybIter_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+ 
+     if (xpybVoid_modinit(m) < 0)
+-	return;
++	MODRETURN(NULL);
+ 
+     /* Export C API for other modules */
+-    PyModule_AddObject(m, "CAPI", PyCObject_FromVoidPtr(&CAPI, NULL));
++    PyModule_AddObject(m, "CAPI", PyCapsule_New(&CAPI, NULL, NULL));
++
++    MODRETURN(m);
+ }
+diff --git a/src/module.h b/src/module.h
+index 5b74e48..8a5c6b9 100644
+--- a/src/module.h
++++ b/src/module.h
+@@ -16,6 +16,21 @@ extern PyObject *xpybModule_extdict;
+ extern PyObject *xpybModule_ext_events;
+ extern PyObject *xpybModule_ext_errors;
+ 
+-PyMODINIT_FUNC initxcb(void);
++PyMODINIT_FUNC
++#if PY_MAJOR_VERSION >= 3
++PyInit_xcb(void);
++#else
++initxcb(void);
++#endif
++
++#if PY_MAJOR_VERSION < 3
++PyObject *
++PyMemoryView_FromMemory(char *mem, Py_ssize_t size, int flags);
++#endif
++
++#if PY_MAJOR_VERSION >= 3
++PyObject *
++PyBuffer_FromObject(PyObject *object, Py_ssize_t offset, Py_ssize_t size);
++#endif
+ 
+ #endif
+diff --git a/src/protobj.c b/src/protobj.c
+index f76f9af..9841c90 100644
+--- a/src/protobj.c
++++ b/src/protobj.c
+@@ -17,7 +17,7 @@ static int
+ xpybProtobj_init(xpybProtobj *self, PyObject *args, PyObject *kw)
+ {
+     static char *kwlist[] = { "parent", "offset", "size", NULL };
+-    Py_ssize_t offset = 0, size = Py_END_OF_BUFFER;
++    Py_ssize_t offset = 0, size = -1;
+     PyObject *parent;
+ 
+     if (!PyArg_ParseTupleAndKeywords(args, kw, "O|nn", kwlist,
+@@ -27,7 +27,7 @@ xpybProtobj_init(xpybProtobj *self, PyObject *args, PyObject *kw)
+     self->buf = PyBuffer_FromObject(parent, offset, size);
+     if (self->buf == NULL)
+ 	return -1;
+-
++    
+     return 0;
+ }
+ 
+@@ -35,85 +35,123 @@ static void
+ xpybProtobj_dealloc(xpybProtobj *self)
+ {
+     Py_CLEAR(self->buf);
+-    self->ob_type->tp_free((PyObject *)self);
++    Py_TYPE(self)->tp_free((PyObject *)self);
+ }
+ 
++#if PY_MAJOR_VERSION < 3
++#define BUFFER_TYPE PyBuffer_Type
++#else
++#define BUFFER_TYPE PyMemoryView_Type
++#endif
++
++#if PY_MAJOR_VERSION < 3
+ static Py_ssize_t
+ xpybProtobj_readbuf(xpybProtobj *self, Py_ssize_t s, void **p)
+ {
+-    return PyBuffer_Type.tp_as_buffer->bf_getreadbuffer(self->buf, s, p);
++    return BUFFER_TYPE.tp_as_buffer->bf_getreadbuffer(self->buf, s, p);
+ }
+ 
+ static Py_ssize_t
+ xpybProtobj_segcount(xpybProtobj *self, Py_ssize_t *s)
+ {
+-    return PyBuffer_Type.tp_as_buffer->bf_getsegcount(self->buf, s);
++    return BUFFER_TYPE.tp_as_buffer->bf_getsegcount(self->buf, s);
+ }
+ 
+ static Py_ssize_t
+ xpybProtobj_charbuf(xpybProtobj *self, Py_ssize_t s, char **p)
+ {
+-    return PyBuffer_Type.tp_as_buffer->bf_getcharbuffer(self->buf, s, p);
++    return BUFFER_TYPE.tp_as_buffer->bf_getcharbuffer(self->buf, s, p);
+ }
++#endif /* PY_MAJOR_VERSION < 3 */
++
++#if PY_MAJOR_VERSION >= 3
++static int
++xpybProtobj_getbuffer(xpybProtobj *self, Py_buffer *buf, int i)
++{
++    return BUFFER_TYPE.tp_as_buffer->bf_getbuffer(self->buf, buf, i);
++}
++
++static void
++xpybProtobj_releasebuffer(xpybProtobj *self, Py_buffer *buf)
++{
++    BUFFER_TYPE.tp_as_buffer->bf_releasebuffer(self->buf, buf);
++}
++#endif /* PY_MAJOR_VERSION >= 3 */
+ 
+ static Py_ssize_t
+ xpybProtobj_length(xpybProtobj *self)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_length(self->buf);
++    return PyMapping_Length(self->buf);
+ }
+ 
+ static PyObject *
+ xpybProtobj_concat(xpybProtobj *self, PyObject *arg)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_concat(self->buf, arg);
++    return BUFFER_TYPE.tp_as_sequence->sq_concat(self->buf, arg);
+ }
+ 
+ static PyObject *
+ xpybProtobj_repeat(xpybProtobj *self, Py_ssize_t arg)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_repeat(self->buf, arg);
++    return BUFFER_TYPE.tp_as_sequence->sq_repeat(self->buf, arg);
+ }
+ 
+ static PyObject *
+ xpybProtobj_item(xpybProtobj *self, Py_ssize_t arg)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_item(self->buf, arg);
++    return BUFFER_TYPE.tp_as_sequence->sq_item(self->buf, arg);
+ }
+ 
++static int
++xpybProtobj_ass_item(xpybProtobj *self, Py_ssize_t arg1, PyObject *arg2)
++{
++    return BUFFER_TYPE.tp_as_sequence->sq_ass_item(self->buf, arg1, arg2);
++}
++
++#if PY_MAJOR_VERSION >= 3
+ static PyObject *
+-xpybProtobj_slice(xpybProtobj *self, Py_ssize_t arg1, Py_ssize_t arg2)
++xpybProtobj_subscript(xpybProtobj *self, PyObject *item)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_slice(self->buf, arg1, arg2);
++    return BUFFER_TYPE.tp_as_mapping->mp_subscript(self->buf, item);
+ }
+ 
+ static int
+-xpybProtobj_ass_item(xpybProtobj *self, Py_ssize_t arg1, PyObject *arg2)
++xpybProtobj_ass_subscript(xpybProtobj *self, PyObject *item1, PyObject *item2)
++{
++    return BUFFER_TYPE.tp_as_mapping->mp_ass_subscript(self->buf, item1, item2);
++}
++#endif /* PY_MAJOR_VERSION >= 3 */
++
++#if PY_MAJOR_VERSION < 3
++static PyObject *
++xpybProtobj_slice(xpybProtobj *self, Py_ssize_t arg1, Py_ssize_t arg2)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_ass_item(self->buf, arg1, arg2);
++    return BUFFER_TYPE.tp_as_sequence->sq_slice(self->buf, arg1, arg2);
+ }
+ 
+ static int
+ xpybProtobj_ass_slice(xpybProtobj *self, Py_ssize_t arg1, Py_ssize_t arg2, PyObject *arg3)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_ass_slice(self->buf, arg1, arg2, arg3);
++    return BUFFER_TYPE.tp_as_sequence->sq_ass_slice(self->buf, arg1, arg2, arg3);
+ }
++#endif /* PY_MAJOR_VERSION < 3 */
+ 
+ static int
+ xpybProtobj_contains(xpybProtobj *self, PyObject *arg)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_contains(self->buf, arg);
++    return BUFFER_TYPE.tp_as_sequence->sq_contains(self->buf, arg);
+ }
+ 
+ static PyObject *
+ xpybProtobj_inplace_concat(xpybProtobj *self, PyObject *arg)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_inplace_concat(self->buf, arg);
++    return BUFFER_TYPE.tp_as_sequence->sq_inplace_concat(self->buf, arg);
+ }
+ 
+ static PyObject *
+ xpybProtobj_inplace_repeat(xpybProtobj *self, Py_ssize_t arg)
+ {
+-    return PyBuffer_Type.tp_as_sequence->sq_inplace_repeat(self->buf, arg);
++    return BUFFER_TYPE.tp_as_sequence->sq_inplace_repeat(self->buf, arg);
+ }
+ 
+ 
+@@ -132,9 +170,14 @@ xpybProtobj_inplace_repeat(xpybProtobj *self, Py_ssize_t arg)
+  */
+ 
+ static PyBufferProcs xpybProtobj_bufops = {
++#if PY_MAJOR_VERSION >= 3
++    .bf_getbuffer = (getbufferproc)xpybProtobj_getbuffer,
++    .bf_releasebuffer = (releasebufferproc)xpybProtobj_releasebuffer
++#else
+     .bf_getreadbuffer = (readbufferproc)xpybProtobj_readbuf,
+     .bf_getsegcount = (segcountproc)xpybProtobj_segcount,
+     .bf_getcharbuffer = (charbufferproc)xpybProtobj_charbuf
++#endif
+ };
+ 
+ static PySequenceMethods xpybProtobj_seqops = {
+@@ -142,16 +185,28 @@ static PySequenceMethods xpybProtobj_seqops = {
+     .sq_concat = (binaryfunc)xpybProtobj_concat,
+     .sq_repeat = (ssizeargfunc)xpybProtobj_repeat,
+     .sq_item = (ssizeargfunc)xpybProtobj_item,
++#if PY_MAJOR_VERSION < 3
+     .sq_slice = (ssizessizeargfunc)xpybProtobj_slice,
++#endif
+     .sq_ass_item = (ssizeobjargproc)xpybProtobj_ass_item,
++#if PY_MAJOR_VERSION < 3
+     .sq_ass_slice = (ssizessizeobjargproc)xpybProtobj_ass_slice,
++#endif
+     .sq_contains = (objobjproc)xpybProtobj_contains,
+     .sq_inplace_concat = (binaryfunc)xpybProtobj_inplace_concat,
+     .sq_inplace_repeat = (ssizeargfunc)xpybProtobj_inplace_repeat
+ };
+ 
++#if PY_MAJOR_VERSION >= 3
++static PyMappingMethods xpybProtobj_mapops = {
++    .mp_length = (lenfunc)xpybProtobj_length,
++    .mp_subscript = (binaryfunc)xpybProtobj_subscript,
++    .mp_ass_subscript = (objobjargproc)xpybProtobj_ass_subscript
++};
++#endif /* PY_MAJOR_VERSION >= 3 */
++
+ PyTypeObject xpybProtobj_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Protobj",
+     .tp_basicsize = sizeof(xpybProtobj),
+     .tp_init = (initproc)xpybProtobj_init,
+@@ -159,11 +214,13 @@ PyTypeObject xpybProtobj_type = {
+     .tp_dealloc = (destructor)xpybProtobj_dealloc,
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+     .tp_doc = "XCB generic X protocol object",
+-    .tp_as_buffer = &xpybProtobj_bufops,
+-    .tp_as_sequence = &xpybProtobj_seqops
++#if PY_MAJOR_VERSION >= 3
++    .tp_as_mapping = &xpybProtobj_mapops,
++#endif
++    .tp_as_sequence = &xpybProtobj_seqops,
++    .tp_as_buffer = &xpybProtobj_bufops
+ };
+ 
+-
+ /*
+  * Module init
+  */
+diff --git a/src/py_client.py b/src/py_client.py
+index 5c83e46..a47a917 100755
+--- a/src/py_client.py
++++ b/src/py_client.py
+@@ -58,6 +58,32 @@ def _t(str):
+     '''
+     return str[-1]
+ 
++def _pt(str):
++    '''
++    Does Python-name conversion on a type tuple of strings.
++    '''
++
++    if len(str) == 1:
++        return str[0]
++
++    path, ext = str[:-1], str[-1]
++    path = [ x.lower() for x in path ]
++
++    assert (path[0] == 'xcb')
++
++    # xcbgen doesn't use 'xproto', but python does
++    if len(path) == 1:
++        path = ['xcb', 'xproto']
++
++    # If the module is one currently being generated, no need for namespace.
++    if path[-1] == module.namespace.header:
++        path = []
++
++    # Turns out we want 'xproto.RECTANGLE' and not 'xcb.xproto.RECTANGLE'.
++    path = path[1:]
++
++    return '.'.join(path + [ext])
++
+ def _n(str):
+     '''
+     Does Python-name conversion on a single string fragment.
+@@ -114,14 +140,24 @@ def py_open(self):
+     _py('#')
+     _py('')
+ 
++    _py('import sys')
++
++    _py('if sys.version_info[0] < 3:')
++    _py('    from cStringIO import StringIO as BytesIO')
++    _py('else:')
++    _py('    from io import BytesIO')
++    
+     _py('import xcb')
+-    _py('import cStringIO')
++
+     _py('from struct import pack, unpack_from')
+     _py('from array import array')
+         
+     if _ns.is_ext:
+         for (n, h) in self.imports:
+-            _py('import %s', h)
++            _py('if sys.version_info[0] < 3:')
++            _py('    import %s', h)
++            _py('else:')
++            _py('    from xcb import %s', h)
+ 
+         _py('')
+         _py('MAJOR_VERSION = %s', _ns.major_version)
+@@ -146,9 +182,9 @@ def py_open(self):
+     _py('}')
+     _py('')
+     if _ns.is_ext:
+-        _py('xcb._add_ext(key, %sExtension, _events, _errors)', _ns.header)
++        _py('xcb.add_ext(key, %sExtension, _events, _errors)', _ns.header)
+     else:
+-        _py('xcb._add_core(%sExtension, Setup, _events, _errors)', _ns.header)
++        _py('xcb.add_core(%sExtension, Setup, _events, _errors)', _ns.header)
+     
+ 
+ def py_close(self):
+@@ -189,6 +225,8 @@ def _py_type_setup(self, name, postfix=''):
+     Recurses into child fields and list member types.
+     '''
+     # Do all the various names in advance
++    if not (self.is_simple or self.is_pad) and not postfix:
++        self.py_reftype = _pt(name) + postfix
+     self.py_type = _t(name) + postfix
+ 
+     self.py_request_name = _t(name)
+@@ -277,6 +315,8 @@ def _py_get_expr(expr):
+     '''
+     lenexp = _py_get_length_field(expr)
+ 
++    if expr.op == '/':
++        expr.op = '//'
+     if expr.op != None:
+         return '(' + _py_get_expr(expr.lhs) + ' ' + expr.op + ' ' + _py_get_expr(expr.rhs) + ')'
+     elif expr.bitfield:
+@@ -326,7 +366,7 @@ def _py_complex(self, name):
+             _py('        self.%s = xcb.List(parent, offset, %s, %s, %d)', _n(field.field_name), _py_get_expr(field.type.expr), field.py_listtype, field.py_listsize)
+             _py('        offset += len(self.%s.buf())', _n(field.field_name))
+         elif field.type.is_container and field.type.fixed_size():
+-            _py('        self.%s = %s(parent, offset, %s)', _n(field.field_name), field.py_type, field.type.size)
++            _py('        self.%s = %s(parent, offset, %s)', _n(field.field_name), field.type.py_reftype, field.type.size)
+             _py('        offset += %s', field.type.size)
+         else:
+             _py('        self.%s = %s(parent, offset)', _n(field.field_name), field.py_type)
+@@ -363,7 +403,7 @@ def py_struct(self, name):
+     _py_complex(self, name)
+ 
+     if not self.fixed_size():
+-        _py('        xcb._resize_obj(self, offset - base)')
++        _py('        xcb.resize_obj(self, offset - base)')
+ 
+ def py_union(self, name):
+     '''
+@@ -401,7 +441,7 @@ def py_union(self, name):
+                 _py('        size = max(size, len(self.%s))', _n(field.field_name))
+ 
+     if not self.fixed_size():
+-        _py('        xcb._resize_obj(self, size)')
++        _py('        xcb.resize_obj(self, size)')
+ 
+ def _py_reply(self, name):
+     '''
+@@ -467,7 +507,7 @@ def _py_request_helper(self, name, void, regular):
+     _py_setlevel(1)
+     _py('')
+     _py('    def %s(self, %s):', func_name, ', '.join([_n(x.field_name) for x in param_fields]))
+-    _py('        buf = cStringIO.StringIO()')
++    _py('        buf = BytesIO()')
+ 
+     for field in wire_fields:
+         if field.auto:
+@@ -492,7 +532,7 @@ def _py_request_helper(self, name, void, regular):
+             _py('        for elt in xcb.Iterator(%s, %d, \'%s\', False):', _n(field.field_name), field.type.py_format_len, _n(field.field_name))
+             _py('            buf.write(pack(\'=%s\', *elt))', field.type.py_format_str)
+         elif field.type.is_list and field.type.member.is_simple:
+-            _py('        buf.write(str(buffer(array(\'%s\', %s))))', field.type.member.py_format_str, _n(field.field_name))
++            _py('        buf.write(array(\'%s\', %s).tostring())', field.type.member.py_format_str, _n(field.field_name))
+         else:
+             _py('        for elt in xcb.Iterator(%s, %d, \'%s\', True):', _n(field.field_name), field.type.member.py_format_len, _n(field.field_name))
+             _py('            buf.write(pack(\'=%s\', *elt))', field.type.member.py_format_str)
+@@ -593,9 +633,9 @@ output = {'open'    : py_open,
+ # Check for the argument that specifies path to the xcbgen python package.
+ try:
+     opts, args = getopt.getopt(sys.argv[1:], 'p:')
+-except getopt.GetoptError, err:
+-    print str(err)
+-    print 'Usage: py_client.py [-p path] file.xml'
++except getopt.GetoptError(err):
++    print(str(err))
++    print('Usage: py_client.py [-p path] file.xml')
+     sys.exit(1)
+ 
+ for (opt, arg) in opts:
+@@ -606,13 +646,14 @@ for (opt, arg) in opts:
+ try:
+     from xcbgen.state import Module
+ except ImportError:
+-    print ''
+-    print 'Failed to load the xcbgen Python package!'
+-    print 'Make sure that xcb/proto installed it on your Python path.'
+-    print 'If not, you will need to create a .pth file or define $PYTHONPATH'
+-    print 'to extend the path.'
+-    print 'Refer to the README file in xcb/proto for more info.'
+-    print ''
++    print ('''
++Failed to load the xcbgen Python package!
++Make sure that xcb/proto installed it on your Python path.
++If not, you will need to create a .pth file or define $PYTHONPATH
++to extend the path.
++
++Refer to the README file in xcb/proto for more information.
++''')
+     raise
+ 
+ # Parse the xml header
+diff --git a/src/reply.c b/src/reply.c
+index d87a135..c4ab754 100644
+--- a/src/reply.c
++++ b/src/reply.c
+@@ -17,18 +17,23 @@
+  * Members
+  */
+ 
++#if PY_MAJOR_VERSION >= 3
++#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
++#else
++#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
++#endif
++
+ static PyObject *
+ xpybReply_getattro(PyObject *self, PyObject *obj)
+ {
+-    const char *name = PyString_AS_STRING(obj);
+     xcb_generic_reply_t *data;
+     Py_ssize_t size;
+ 
+     if (PyObject_AsReadBuffer(self, (const void **)&data, &size) < 0)
+ 	return NULL;
+ 
+-    if (strcmp(name, "length") == 0)
+-	return Py_BuildValue("I", data->length);
++    if (Py_CompareWithASCIIString(obj, "length") == 0)
++        return Py_BuildValue("I", data->length);
+ 
+     return xpybReply_type.tp_base->tp_getattro(self, obj);
+ }
+@@ -39,7 +44,7 @@ xpybReply_getattro(PyObject *self, PyObject *obj)
+  */
+ 
+ PyTypeObject xpybReply_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Reply",
+     .tp_basicsize = sizeof(xpybReply),
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+diff --git a/src/request.c b/src/request.c
+index 699a938..23eff33 100644
+--- a/src/request.c
++++ b/src/request.c
+@@ -48,7 +48,7 @@ xpybRequest_init(xpybRequest *self, PyObject *args, PyObject *kw)
+  */
+ 
+ PyTypeObject xpybRequest_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Request",
+     .tp_basicsize = sizeof(xpybRequest),
+     .tp_init = (initproc)xpybRequest_init,
+diff --git a/src/response.c b/src/response.c
+index abaad77..03de840 100644
+--- a/src/response.c
++++ b/src/response.c
+@@ -16,19 +16,24 @@
+  * Members
+  */
+ 
++#if PY_MAJOR_VERSION >= 3
++#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
++#else
++#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
++#endif
++
+ static PyObject *
+ xpybResponse_getattro(PyObject *self, PyObject *obj)
+ {
+-    const char *name = PyString_AS_STRING(obj);
+     const xcb_generic_event_t *data;
+     Py_ssize_t size;
+ 
+     if (PyObject_AsReadBuffer(self, (const void **)&data, &size) < 0)
+ 	return NULL;
+ 
+-    if (strcmp(name, "response_type") == 0)
++    if (Py_CompareWithASCIIString(obj, "response_type") == 0)
+ 	return Py_BuildValue("B", data->response_type);
+-    if (strcmp(name, "sequence") == 0)
++    if (Py_CompareWithASCIIString(obj, "sequence") == 0)
+ 	return Py_BuildValue("H", data->sequence);
+ 
+     return xpybResponse_type.tp_base->tp_getattro(self, obj);
+@@ -40,7 +45,7 @@ xpybResponse_getattro(PyObject *self, PyObject *obj)
+  */
+ 
+ PyTypeObject xpybResponse_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Response",
+     .tp_basicsize = sizeof(xpybResponse),
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

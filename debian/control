@@ -1,0 +1,51 @@
+Source: xpyb
+Section: python
+Priority: optional
+Maintainer: Julien Danjou <acid@debian.org>
+Build-Depends: debhelper (>= 7.0.50~), automake, autoconf, xcb-proto (>= 1.7.1), libtool, pkg-config,
+    libxcb1-dev (>= 1.1), python3-all-dev, python-all-dev (>= 2.5), dh-python, python-xcbgen (>= 1.7.1)
+Standards-Version: 3.9.6
+Homepage: http://xcb.freedesktop.org
+X-Python-Version: >= 2.6
+X-Python3-Version: >= 3.2
+
+Package: python-xpyb-doc
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}
+Description: Python bindings to XCB (common documentation)
+ This module provides Python binding to libxcb, the X C Bindings library.
+ .
+ It provides an interface to the X Window System protocol, designed to replace
+ the Xlib interface, featuring latency hiding, small size, direct protocol
+ access and thread support.
+ .
+ This is the common documentation package.
+
+Package: python-xpyb
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
+Provides: ${python:Provides}
+Suggests: python-xpyb-doc
+Description: Python bindings to XCB (Python 2)
+ This module provides Python binding to libxcb, the X C Bindings library.
+ .
+ It provides an interface to the X Window System protocol, designed to replace
+ the Xlib interface, featuring latency hiding, small size, direct protocol
+ access and thread support.
+ .
+ This is the Python 3 version of the package.
+
+Package: python3-xpyb
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends}
+Provides: ${python3:Provides}
+Suggests: python-xpyb-doc
+Description: Python bindings to XCB (Python 3)
+ This module provides Python binding to libxcb, the X C Bindings library.
+ .
+ It provides an interface to the X Window System protocol, designed to replace
+ the Xlib interface, featuring latency hiding, small size, direct protocol
+ access and thread support.
+ .
+ This is the Python 3 version of the package.

@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+
+# PYTHON_VERSION=$(shell pyversions -s)
+
+export DEB_CFLAGS_APPEND=-Wall -Wimplicit -Wno-strict-aliasing -Werror
+
+export PYBUILD_NAME=xpyb
+export PYBUILD_SYSTEM=custom
+
+BUILDFLAGS=$(shell dpkg-buildflags --export=configure)
+
+export PYBUILD_CLEAN_ARGS=rm -rf {build_dir}
+export PYBUILD_CONFIGURE_ARGS=mkdir -p {build_dir} && cd {build_dir} && ../../../configure PYTHON=python{version} --enable-xinput --prefix=/usr $(BUILDFLAGS)
+export PYBUILD_BUILD_ARGS=make -C {build_dir}
+export PYBUILD_INSTALL_ARGS=make -C {build_dir} DESTDIR={destdir} includedir=$(PYTHON_INCLUDE) install
+
+%:
+	dh $@ --with python2,python3 --buildsystem=pybuild
+
+override_dh_auto_configure:
+	autoreconf -vfi
+	dh_auto_configure
+
+override_dh_auto_install:
+	dh_auto_install
+	rm -r debian/python-xpyb/usr/share/doc/xpyb
+	mkdir -p debian/python-xpyb-doc/usr/share/doc/
+	mv debian/python3-xpyb/usr/share/doc/xpyb debian/python-xpyb-doc/usr/share/doc/
+	rm -r debian/python-xpyb/usr/lib/pkgconfig
+	rm -r debian/python3-xpyb/usr/lib/pkgconfig

@@ -1,0 +1,105 @@
+From: Klee Dienes <klee.dienes@hadronindustries.com>
+Date: Sat, 3 Jan 2015 16:48:51 -0500
+Subject: Use PyVarObject_HEAD_INIT instead of PyObject_HEAD_INIT.
+
+---
+ src/conn.c   | 2 +-
+ src/cookie.c | 2 +-
+ src/error.c  | 2 +-
+ src/iter.c   | 2 +-
+ src/struct.c | 2 +-
+ src/union.c  | 2 +-
+ src/void.c   | 2 +-
+ 7 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/conn.c b/src/conn.c
+index 1b21d17..8891c2d 100644
+--- a/src/conn.c
++++ b/src/conn.c
+@@ -566,7 +566,7 @@ static PyMethodDef xpybConn_methods[] = {
+  */
+ 
+ PyTypeObject xpybConn_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Connection",
+     .tp_basicsize = sizeof(xpybConn),
+     .tp_new = xpybConn_new,
+diff --git a/src/cookie.c b/src/cookie.c
+index ae7825d..b612a66 100644
+--- a/src/cookie.c
++++ b/src/cookie.c
+@@ -128,7 +128,7 @@ static PyMethodDef xpybCookie_methods[] = {
+  */
+ 
+ PyTypeObject xpybCookie_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Cookie",
+     .tp_basicsize = sizeof(xpybCookie),
+     .tp_new = xpybCookie_new,
+diff --git a/src/error.c b/src/error.c
+index c51530b..a481f5c 100644
+--- a/src/error.c
++++ b/src/error.c
+@@ -68,7 +68,7 @@ xpybError_getattro(PyObject *self, PyObject *obj)
+  */
+ 
+ PyTypeObject xpybError_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Error",
+     .tp_basicsize = sizeof(xpybError),
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+diff --git a/src/iter.c b/src/iter.c
+index 5368f24..f7e7afa 100644
+--- a/src/iter.c
++++ b/src/iter.c
+@@ -153,7 +153,7 @@ xpybIter_dealloc(xpybIter *self)
+  */
+ 
+ PyTypeObject xpybIter_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Iterator",
+     .tp_basicsize = sizeof(xpybIter),
+     .tp_init = (initproc)xpybIter_init,
+diff --git a/src/struct.c b/src/struct.c
+index e09bbac..2c612f2 100644
+--- a/src/struct.c
++++ b/src/struct.c
+@@ -22,7 +22,7 @@
+  */
+ 
+ PyTypeObject xpybStruct_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Struct",
+     .tp_basicsize = sizeof(xpybStruct),
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+diff --git a/src/union.c b/src/union.c
+index 99fd113..20e5ab8 100644
+--- a/src/union.c
++++ b/src/union.c
+@@ -22,7 +22,7 @@
+  */
+ 
+ PyTypeObject xpybUnion_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.Union",
+     .tp_basicsize = sizeof(xpybUnion),
+     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+diff --git a/src/void.c b/src/void.c
+index ee936ac..4bfc937 100644
+--- a/src/void.c
++++ b/src/void.c
+@@ -28,7 +28,7 @@
+  */
+ 
+ PyTypeObject xpybVoid_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = "xcb.VoidCookie",
+     .tp_basicsize = sizeof(xpybVoid),
+     .tp_flags = Py_TPFLAGS_DEFAULT,
