@@ -153,7 +153,7 @@ xpybIter_dealloc(xpybIter *self)
  */
 
 PyTypeObject xpybIter_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Iterator",
     .tp_basicsize = sizeof(xpybIter),
     .tp_init = (initproc)xpybIter_init,

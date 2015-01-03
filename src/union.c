@@ -22,7 +22,7 @@
  */
 
 PyTypeObject xpybUnion_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Union",
     .tp_basicsize = sizeof(xpybUnion),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

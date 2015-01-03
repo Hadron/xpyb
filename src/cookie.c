@@ -128,7 +128,7 @@ static PyMethodDef xpybCookie_methods[] = {
  */
 
 PyTypeObject xpybCookie_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Cookie",
     .tp_basicsize = sizeof(xpybCookie),
     .tp_new = xpybCookie_new,

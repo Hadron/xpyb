@@ -68,7 +68,7 @@ xpybError_getattro(PyObject *self, PyObject *obj)
  */
 
 PyTypeObject xpybError_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Error",
     .tp_basicsize = sizeof(xpybError),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

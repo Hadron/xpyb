@@ -566,7 +566,7 @@ static PyMethodDef xpybConn_methods[] = {
  */
 
 PyTypeObject xpybConn_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Connection",
     .tp_basicsize = sizeof(xpybConn),
     .tp_new = xpybConn_new,
