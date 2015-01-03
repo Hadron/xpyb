@@ -3,7 +3,7 @@
 
 typedef struct {
     PyObject_HEAD
-    PyStringObject *name;
+    PyUnicodeObject *name;
     xcb_extension_t key;
 } xpybExtkey;
 

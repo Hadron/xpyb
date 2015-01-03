@@ -17,18 +17,23 @@
  * Members
  */
 
+#if PY_MAJOR_VERSION >= 3
+#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
+#else
+#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
+#endif
+
 static PyObject *
 xpybReply_getattro(PyObject *self, PyObject *obj)
 {
-    const char *name = PyString_AS_STRING(obj);
     xcb_generic_reply_t *data;
     Py_ssize_t size;
 
     if (PyObject_AsReadBuffer(self, (const void **)&data, &size) < 0)
 	return NULL;
 
-    if (strcmp(name, "length") == 0)
-	return Py_BuildValue("I", data->length);
+    if (Py_CompareWithASCIIString(obj, "length") == 0)
+        return Py_BuildValue("I", data->length);
 
     return xpybReply_type.tp_base->tp_getattro(self, obj);
 }
@@ -39,7 +44,7 @@ xpybReply_getattro(PyObject *self, PyObject *obj)
  */
 
 PyTypeObject xpybReply_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Reply",
     .tp_basicsize = sizeof(xpybReply),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

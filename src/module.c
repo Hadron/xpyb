@@ -214,17 +214,17 @@ static PyMethodDef XCBMethods[] = {
       METH_VARARGS,
       "Returns number of padding bytes needed for a type size." },
 
-    { "_add_core",
+    { "add_core",
       (PyCFunction)xpyb_add_core,
       METH_VARARGS,
       "Registers the core protocol class.  Not meant for end users." },
 
-    { "_add_ext",
+    { "add_ext",
       (PyCFunction)xpyb_add_ext,
       METH_VARARGS,
       "Registers a new extension protocol class.  Not meant for end users." },
 
-    { "_resize_obj",
+    { "resize_obj",
       (PyCFunction)xpyb_resize_obj,
       METH_VARARGS,
       "Sizes a protocol object after size determination.  Not meant for end users." },
@@ -240,64 +240,95 @@ static xpyb_CAPI_t CAPI = {
  * Module init
  */
 
+#if PY_MAJOR_VERSION >= 3
+static struct PyModuleDef moduledef = {
+  PyModuleDef_HEAD_INIT,
+  "xcb",
+  "XCB Python Binding", /* m_doc */
+  -1,                   /* m_size */
+  XCBMethods,		/* m_methods */
+  NULL,			/* m_reload */
+  NULL,			/* m_traverse */
+  NULL,			/* m_clear */
+  NULL,			/* m_free */
+};
+#endif /* PY_MAJOR_VERSION >= 3 */
+
+#if PY_MAJOR_VERSION >= 3
+#define MODRETURN(x) return x
+#else
+#define MODRETURN(x) return
+#endif
+
 PyMODINIT_FUNC
+#if PY_MAJOR_VERSION >= 3
+PyInit_xcb(void)
+#else
 initxcb(void) 
+#endif
 {
     /* Create module object */
+#if PY_MAJOR_VERSION >= 3
+    PyObject *m = PyModule_Create(&moduledef);
+#else
     PyObject *m = Py_InitModule3("xcb", XCBMethods, "XCB Python Binding.");
+#endif
+
     if (m == NULL)
-	return;
+	MODRETURN(NULL);
 
     /* Create other internal objects */
     if ((xpybModule_extdict = PyDict_New()) == NULL)
-	return;
+	MODRETURN(NULL);
     if ((xpybModule_ext_events = PyDict_New()) == NULL)
-	return;
+	MODRETURN(NULL);
     if ((xpybModule_ext_errors = PyDict_New()) == NULL)
-	return;
+	MODRETURN(NULL);
 
     /* Add integer constants */
     if (xpybConstant_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
 
     /* Set up all the types */
     if (xpybExcept_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybConn_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybCookie_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
 
     if (xpybExtkey_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybExt_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
 
     if (xpybProtobj_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybResponse_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybEvent_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybError_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybReply_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybRequest_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybStruct_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybUnion_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
 
     if (xpybList_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
     if (xpybIter_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
 
     if (xpybVoid_modinit(m) < 0)
-	return;
+	MODRETURN(NULL);
 
     /* Export C API for other modules */
-    PyModule_AddObject(m, "CAPI", PyCObject_FromVoidPtr(&CAPI, NULL));
+    PyModule_AddObject(m, "CAPI", PyCapsule_New(&CAPI, NULL, NULL));
+
+    MODRETURN(m);
 }

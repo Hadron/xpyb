@@ -20,27 +20,26 @@ xpybExtkey_new(PyTypeObject *self, PyObject *args, PyObject *kw)
 static int
 xpybExtkey_init(xpybExtkey *self, PyObject *args)
 {
-    PyStringObject *name;
-
-    if (!PyArg_ParseTuple(args, "S", &name))
+    if (!PyArg_ParseTuple(args, "s", &self->key.name))
+	return -1;
+    if (!PyArg_ParseTuple(args, "O", &self->name))
 	return -1;
 
-    Py_INCREF(self->name = name);
-    self->key.name = PyString_AS_STRING(name);
+    Py_INCREF(self->name);
     return 0;
 }
 
 static long
 xpybExtkey_hash(xpybExtkey *self)
 {
-    return PyString_Type.tp_hash((PyObject *)self->name);
+    return PyUnicode_Type.tp_hash((PyObject *)self->name);
 }
 
 static void
 xpybExtkey_dealloc(xpybExtkey *self)
 {
     Py_CLEAR(self->name);
-    self->ob_type->tp_free((PyObject *)self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 
@@ -49,7 +48,7 @@ xpybExtkey_dealloc(xpybExtkey *self)
  */
 
 PyTypeObject xpybExtkey_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.ExtensionKey",
     .tp_basicsize = sizeof(xpybExtkey),
     .tp_init = (initproc)xpybExtkey_init,

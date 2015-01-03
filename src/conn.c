@@ -154,6 +154,10 @@ xpybConn_load_ext(xpybConn *self, PyObject *key)
     return ext;
 }
 
+#if PY_MAJOR_VERSION < 3
+#define PyLong_AS_LONG(x) PyInt_AS_LONG(x)
+#endif
+
 static int
 xpybConn_setup_helper(xpybConn *self, xpybExt *ext, PyObject *events, PyObject *errors)
 {
@@ -162,7 +166,7 @@ xpybConn_setup_helper(xpybConn *self, xpybExt *ext, PyObject *events, PyObject *
     PyObject *num, *type, **newmem;
 
     while (PyDict_Next(events, &j, &num, &type)) {
-	opcode = ext->first_event + PyInt_AS_LONG(num);
+	opcode = ext->first_event + PyLong_AS_LONG(num);
 	if (opcode >= self->events_len) {
 	    newlen = opcode + 1;
 	    newmem = realloc(self->events, newlen * sizeof(PyObject *));
@@ -177,7 +181,7 @@ xpybConn_setup_helper(xpybConn *self, xpybExt *ext, PyObject *events, PyObject *
 
     j = 0;
     while (PyDict_Next(errors, &j, &num, &type)) {
-	opcode = ext->first_error + PyInt_AS_LONG(num);
+	opcode = ext->first_error + PyLong_AS_LONG(num);
 	if (opcode >= self->errors_len) {
 	    newlen = opcode + 1;
 	    newmem = realloc(self->errors, newlen * sizeof(PyObject *));
@@ -258,22 +262,27 @@ xpybConn_dealloc(xpybConn *self)
 
     free(self->events);
     free(self->errors);
-    self->ob_type->tp_free((PyObject *)self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
+
+#if PY_MAJOR_VERSION >= 3
+#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
+#else
+#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
+#endif
 
 static PyObject *
 xpybConn_getattro(xpybConn *self, PyObject *obj)
 {
-    const char *name = PyString_AS_STRING(obj);
     PyMethodDef *mptr = xpybConn_type.tp_methods;
     PyMemberDef *sptr = xpybConn_type.tp_members;
     PyObject *result;
 
     while (mptr && mptr->ml_name)
-	if (strcmp(name, (mptr++)->ml_name) == 0)
+	if (Py_CompareWithASCIIString(obj, (mptr++)->ml_name) == 0)
 	    goto out2;
     while (sptr && sptr->name)
-	if (strcmp(name, (sptr++)->name) == 0)
+	if (Py_CompareWithASCIIString(obj, (sptr++)->name) == 0)
 	    goto out2;
 	
     Py_XINCREF(result = PyDict_GetItem(self->dict, obj));
@@ -288,15 +297,14 @@ out2:
 static int
 xpybConn_setattro(xpybConn *self, PyObject *obj, PyObject *val)
 {
-    const char *name = PyString_AS_STRING(obj);
     PyMethodDef *mptr = xpybConn_type.tp_methods;
     PyMemberDef *sptr = xpybConn_type.tp_members;
 
     while (mptr && mptr->ml_name)
-	if (strcmp(name, (mptr++)->ml_name) == 0)
+	if (Py_CompareWithASCIIString(obj, (mptr++)->ml_name) == 0)
 	    goto out2;
     while (sptr && sptr->name)
-	if (strcmp(name, (sptr++)->name) == 0)
+	if (Py_CompareWithASCIIString(obj, (sptr++)->name) == 0)
 	    goto out2;
 
     return val ? PyDict_SetItem(self->dict, obj, val) : PyDict_DelItem(self->dict, obj);
@@ -410,7 +418,7 @@ xpybConn_get_setup(xpybConn *self, PyObject *args)
 
     if (self->setup == NULL) {
 	s = xcb_get_setup(self->conn);
-	shim = PyBuffer_FromMemory((void *)s, 8 + s->length * 4);
+	shim = PyMemoryView_FromMemory((void *)s, 8 + s->length * 4, 'B');
 	if (shim == NULL)
 	    return NULL;
 	type = (PyObject *)xpybModule_setup;

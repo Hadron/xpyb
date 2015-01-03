@@ -2,6 +2,7 @@
 #include "except.h"
 #include "response.h"
 #include "error.h"
+#include "ext.h"
 
 /*
  * Helpers
@@ -23,7 +24,7 @@ xpybError_set(xpybConn *conn, xcb_generic_error_t *e)
 	    except = PyTuple_GET_ITEM(conn->errors[opcode], 1);
 	}
 
-	shim = PyBuffer_FromMemory(e, sizeof(*e));
+	shim = PyMemoryView_FromMemory((void *) e, sizeof(*e), 'B');
 	if (shim == NULL)
 	    return 1;
 
@@ -46,17 +47,22 @@ xpybError_set(xpybConn *conn, xcb_generic_error_t *e)
  * Members
  */
 
+#if PY_MAJOR_VERSION >= 3
+#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
+#else
+#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
+#endif
+
 static PyObject *
 xpybError_getattro(PyObject *self, PyObject *obj)
 {
-    const char *name = PyString_AS_STRING(obj);
     const xcb_generic_error_t *data;
     Py_ssize_t size;
 
     if (PyObject_AsReadBuffer(self, (const void **)&data, &size) < 0)
 	return NULL;
 
-    if (strcmp(name, "code") == 0)
+    if (Py_CompareWithASCIIString(obj, "code") == 0)
 	return Py_BuildValue("B", data->error_code);
 
     return xpybError_type.tp_base->tp_getattro(self, obj);

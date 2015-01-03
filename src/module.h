@@ -16,6 +16,21 @@ extern PyObject *xpybModule_extdict;
 extern PyObject *xpybModule_ext_events;
 extern PyObject *xpybModule_ext_errors;
 
-PyMODINIT_FUNC initxcb(void);
+PyMODINIT_FUNC
+#if PY_MAJOR_VERSION >= 3
+PyInit_xcb(void);
+#else
+initxcb(void);
+#endif
+
+#if PY_MAJOR_VERSION < 3
+PyObject *
+PyMemoryView_FromMemory(char *mem, Py_ssize_t size, int flags);
+#endif
+
+#if PY_MAJOR_VERSION >= 3
+PyObject *
+PyBuffer_FromObject(PyObject *object, Py_ssize_t offset, Py_ssize_t size);
+#endif
 
 #endif

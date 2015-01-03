@@ -17,7 +17,7 @@ AM_INIT_AUTOMAKE([foreign dist-bzip2])
 AM_PATH_PYTHON([2.5])
 AC_MSG_CHECKING([for python include dir])
 PYTHON_INCLUDE=`$PYTHON -c "from distutils import sysconfig; \
-			    print sysconfig.get_python_inc()"`
+			    print(sysconfig.get_python_inc())"`
 if test -z "${PYTHON_INCLUDE}"; then
    AC_MSG_ERROR([Failed to find Python include directory.
 		 Check your Python installation.])

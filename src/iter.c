@@ -10,13 +10,25 @@ static void
 xpybIter_err(xpybIter *self)
 {
     if (self->is_list)
-	PyErr_Format(xpybExcept_base,
-		     "Extra items in '%s' list (expect multiple of %d).",
+#if PY_MAJOR_VERSION >= 3
+      PyErr_Format(xpybExcept_base,
+		     "Extra items in '%S' list (expect multiple of %lu).",
+		     self->name, self->groupsize);
+#else
+      PyErr_Format(xpybExcept_base,
+		     "Extra items in '%s' list (expect multiple of %lu).",
 		     PyString_AS_STRING(self->name), self->groupsize);
+#endif
     else
+#if PY_MAJOR_VERSION >= 3
 	PyErr_Format(xpybExcept_base,
-		     "Too few items in '%s' list (expect %d).",
+		     "Too few items in '%S' list (expect %lu).",
+		     self->name, self->groupsize);
+#else
+      PyErr_Format(xpybExcept_base,
+		     "Too few items in '%s' list (expect %lu).",
 		     PyString_AS_STRING(self->name), self->groupsize);
+#endif
 }
 
 static PyObject *

@@ -48,7 +48,7 @@ xpybRequest_init(xpybRequest *self, PyObject *args, PyObject *kw)
  */
 
 PyTypeObject xpybRequest_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Request",
     .tp_basicsize = sizeof(xpybRequest),
     .tp_init = (initproc)xpybRequest_init,

@@ -6,6 +6,7 @@
 #include "cookie.h"
 #include "reply.h"
 #include "request.h"
+#include "memoryobject.h"
 
 /*
  * Helpers
@@ -154,13 +155,34 @@ static PyMethodDef xpybExt_methods[] = {
     { NULL } /* terminator */
 };
 
+#if PY_MAJOR_VERSION < 3
+PyObject *
+PyMemoryView_FromMemory(char *mem, Py_ssize_t size, int flags)
+{
+  PyObject *buf = PyBuffer_FromMemory(mem, size);
+  return buf;
+}
+#endif
+
+#if PY_MAJOR_VERSION >= 3
+PyObject *
+PyBuffer_FromObject(PyObject *object, Py_ssize_t offset, Py_ssize_t size)
+{
+  PyObject *view = PyMemoryView_FromObject(object);
+  Py_buffer *buf = PyMemoryView_GET_BUFFER(view);
+  if (size == -1) {
+    size = buf->len * buf->itemsize;
+  }
+  return PyMemoryView_FromMemory(((char *) buf->buf) + offset, size, PyBUF_READ);
+}
+#endif
 
 /*
  * Definition
  */
 
 PyTypeObject xpybExt_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Extension",
     .tp_basicsize = sizeof(xpybExt),
     .tp_init = (initproc)xpybExt_init,

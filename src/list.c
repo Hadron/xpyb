@@ -2,14 +2,23 @@
 #include "except.h"
 #include "list.h"
 
+#include "memoryobject.h"
+#include "unicodeobject.h"
+
 /*
  * Helpers
  */
 
+#if PY_MAJOR_VERSION >= 3
+#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
+#else
+#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
+#endif
+
 static PyObject *
-xpybList_build(PyObject *str, Py_ssize_t size, const char *data)
+xpybList_build(int type, Py_ssize_t size, const char *data)
 {
-    switch (PyString_AS_STRING(str)[0]) {
+  switch (type) {
     case 'b':
 	return Py_BuildValue("b", *data);
     case 'B':
@@ -75,11 +84,32 @@ xpybList_init(xpybList *self, PyObject *args, PyObject *kw)
     cur = offset;
 
     for (i = 0; i < length; i++) {
-	if (PyString_CheckExact(type)) {
-	    obj = xpybList_build(type, length, data + cur);
+	if (PyUnicode_CheckExact(type)) {
+	    Py_UNICODE *u = PyUnicode_AS_UNICODE(type);
+	    if (PyUnicode_GET_SIZE(type) != 1) {
+	      	PyErr_SetString(xpybExcept_base, "Invalid format character.");
+		return -1;
+	    }
+	    if (u[0] > 255) {
+	      	PyErr_SetString(xpybExcept_base, "Invalid format character.");
+		return -1;
+	    }
+	    obj = xpybList_build(u[0], length, data + cur);
 	    if (obj == NULL)
 		return -1;
 	    cur += size;
+#if PY_MAJOR_VERSION < 3
+	} else if (PyString_CheckExact(type)) {
+	    char *s = PyString_AS_STRING(type);
+	    if ((s[0] == '\0') || (s[1] != '\0')) {
+	      	PyErr_SetString(xpybExcept_base, "Invalid format character.");
+		return -1;
+	    }
+	    obj = xpybList_build(s[0], length, data + cur);
+	    if (obj == NULL)
+		return -1;
+	    cur += size;
+#endif
 	} else if (size > 0) {
 	    arglist = Py_BuildValue("(Onn)", parent, cur, size);
 	    obj = PyEval_CallObject(type, arglist);
@@ -143,6 +173,13 @@ xpybList_item(xpybList *self, Py_ssize_t arg)
     return PyList_Type.tp_as_sequence->sq_item(self->list, arg);
 }
 
+static int
+xpybList_ass_item(xpybList *self, Py_ssize_t arg1, PyObject *arg2)
+{
+    return PyList_Type.tp_as_sequence->sq_ass_item(self->list, arg1, arg2);
+}
+
+#if PY_MAJOR_VERSION < 3
 static PyObject *
 xpybList_slice(xpybList *self, Py_ssize_t arg1, Py_ssize_t arg2)
 {
@@ -150,16 +187,25 @@ xpybList_slice(xpybList *self, Py_ssize_t arg1, Py_ssize_t arg2)
 }
 
 static int
-xpybList_ass_item(xpybList *self, Py_ssize_t arg1, PyObject *arg2)
-{
-    return PyList_Type.tp_as_sequence->sq_ass_item(self->list, arg1, arg2);
-}
-
-static int
 xpybList_ass_slice(xpybList *self, Py_ssize_t arg1, Py_ssize_t arg2, PyObject *arg3)
 {
     return PyList_Type.tp_as_sequence->sq_ass_slice(self->list, arg1, arg2, arg3);
 }
+#endif /* PY_MAJOR_VERSION < 3 */
+
+#if PY_MAJOR_VERSION >= 3
+static PyObject *
+xpybList_subscript(xpybList *self, PyObject *item)
+{
+    return PyList_Type.tp_as_mapping->mp_subscript(self->list, item);
+}
+
+static int
+xpybList_ass_subscript(xpybList *self, PyObject *item1, PyObject *item2)
+{
+    return PyList_Type.tp_as_mapping->mp_ass_subscript(self->list, item1, item2);
+}
+#endif /* PY_MAJOR_VERSION >= 3 */
 
 static int
 xpybList_contains(xpybList *self, PyObject *arg)
@@ -215,16 +261,28 @@ static PySequenceMethods xpybList_seqops = {
     .sq_concat = (binaryfunc)xpybList_concat,
     .sq_repeat = (ssizeargfunc)xpybList_repeat,
     .sq_item = (ssizeargfunc)xpybList_item,
+#if PY_MAJOR_VERSION < 3
     .sq_slice = (ssizessizeargfunc)xpybList_slice,
+#endif
     .sq_ass_item = (ssizeobjargproc)xpybList_ass_item,
+#if PY_MAJOR_VERSION < 3
     .sq_ass_slice = (ssizessizeobjargproc)xpybList_ass_slice,
+#endif
     .sq_contains = (objobjproc)xpybList_contains,
     .sq_inplace_concat = (binaryfunc)xpybList_inplace_concat,
     .sq_inplace_repeat = (ssizeargfunc)xpybList_inplace_repeat
 };
 
+#if PY_MAJOR_VERSION >= 3
+static PyMappingMethods xpybList_mapops = {
+    .mp_length = (lenfunc)xpybList_length,
+    .mp_subscript = (binaryfunc)xpybList_subscript,
+    .mp_ass_subscript = (objobjargproc)xpybList_ass_subscript
+};
+#endif /* PY_MAJOR_VERSION >= 3 */
+
 PyTypeObject xpybList_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.List",
     .tp_basicsize = sizeof(xpybList),
     .tp_new = xpybList_new,
@@ -233,7 +291,10 @@ PyTypeObject xpybList_type = {
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .tp_doc = "XCB generic list object",
     .tp_methods = xpybList_methods,
-    .tp_as_sequence = &xpybList_seqops
+    .tp_as_sequence = &xpybList_seqops,
+#if PY_MAJOR_VERSION >= 3
+    .tp_as_mapping = &xpybList_mapops
+#endif
 };
 
 

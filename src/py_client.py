@@ -58,6 +58,32 @@ def _t(str):
     '''
     return str[-1]
 
+def _pt(str):
+    '''
+    Does Python-name conversion on a type tuple of strings.
+    '''
+
+    if len(str) == 1:
+        return str[0]
+
+    path, ext = str[:-1], str[-1]
+    path = [ x.lower() for x in path ]
+
+    assert (path[0] == 'xcb')
+
+    # xcbgen doesn't use 'xproto', but python does
+    if len(path) == 1:
+        path = ['xcb', 'xproto']
+
+    # If the module is one currently being generated, no need for namespace.
+    if path[-1] == module.namespace.header:
+        path = []
+
+    # Turns out we want 'xproto.RECTANGLE' and not 'xcb.xproto.RECTANGLE'.
+    path = path[1:]
+
+    return '.'.join(path + [ext])
+
 def _n(str):
     '''
     Does Python-name conversion on a single string fragment.
@@ -114,14 +140,24 @@ def py_open(self):
     _py('#')
     _py('')
 
+    _py('import sys')
+
+    _py('if sys.version_info[0] < 3:')
+    _py('    from cStringIO import StringIO as BytesIO')
+    _py('else:')
+    _py('    from io import BytesIO')
+    
     _py('import xcb')
-    _py('import cStringIO')
+
     _py('from struct import pack, unpack_from')
     _py('from array import array')
         
     if _ns.is_ext:
         for (n, h) in self.imports:
-            _py('import %s', h)
+            _py('if sys.version_info[0] < 3:')
+            _py('    import %s', h)
+            _py('else:')
+            _py('    from xcb import %s', h)
 
         _py('')
         _py('MAJOR_VERSION = %s', _ns.major_version)
@@ -146,9 +182,9 @@ def py_open(self):
     _py('}')
     _py('')
     if _ns.is_ext:
-        _py('xcb._add_ext(key, %sExtension, _events, _errors)', _ns.header)
+        _py('xcb.add_ext(key, %sExtension, _events, _errors)', _ns.header)
     else:
-        _py('xcb._add_core(%sExtension, Setup, _events, _errors)', _ns.header)
+        _py('xcb.add_core(%sExtension, Setup, _events, _errors)', _ns.header)
     
 
 def py_close(self):
@@ -189,6 +225,8 @@ def _py_type_setup(self, name, postfix=''):
     Recurses into child fields and list member types.
     '''
     # Do all the various names in advance
+    if not (self.is_simple or self.is_pad) and not postfix:
+        self.py_reftype = _pt(name) + postfix
     self.py_type = _t(name) + postfix
 
     self.py_request_name = _t(name)
@@ -277,6 +315,8 @@ def _py_get_expr(expr):
     '''
     lenexp = _py_get_length_field(expr)
 
+    if expr.op == '/':
+        expr.op = '//'
     if expr.op != None:
         return '(' + _py_get_expr(expr.lhs) + ' ' + expr.op + ' ' + _py_get_expr(expr.rhs) + ')'
     elif expr.bitfield:
@@ -326,7 +366,7 @@ def _py_complex(self, name):
             _py('        self.%s = xcb.List(parent, offset, %s, %s, %d)', _n(field.field_name), _py_get_expr(field.type.expr), field.py_listtype, field.py_listsize)
             _py('        offset += len(self.%s.buf())', _n(field.field_name))
         elif field.type.is_container and field.type.fixed_size():
-            _py('        self.%s = %s(parent, offset, %s)', _n(field.field_name), field.py_type, field.type.size)
+            _py('        self.%s = %s(parent, offset, %s)', _n(field.field_name), field.type.py_reftype, field.type.size)
             _py('        offset += %s', field.type.size)
         else:
             _py('        self.%s = %s(parent, offset)', _n(field.field_name), field.py_type)
@@ -363,7 +403,7 @@ def py_struct(self, name):
     _py_complex(self, name)
 
     if not self.fixed_size():
-        _py('        xcb._resize_obj(self, offset - base)')
+        _py('        xcb.resize_obj(self, offset - base)')
 
 def py_union(self, name):
     '''
@@ -401,7 +441,7 @@ def py_union(self, name):
                 _py('        size = max(size, len(self.%s))', _n(field.field_name))
 
     if not self.fixed_size():
-        _py('        xcb._resize_obj(self, size)')
+        _py('        xcb.resize_obj(self, size)')
 
 def _py_reply(self, name):
     '''
@@ -467,7 +507,7 @@ def _py_request_helper(self, name, void, regular):
     _py_setlevel(1)
     _py('')
     _py('    def %s(self, %s):', func_name, ', '.join([_n(x.field_name) for x in param_fields]))
-    _py('        buf = cStringIO.StringIO()')
+    _py('        buf = BytesIO()')
 
     for field in wire_fields:
         if field.auto:
@@ -492,7 +532,7 @@ def _py_request_helper(self, name, void, regular):
             _py('        for elt in xcb.Iterator(%s, %d, \'%s\', False):', _n(field.field_name), field.type.py_format_len, _n(field.field_name))
             _py('            buf.write(pack(\'=%s\', *elt))', field.type.py_format_str)
         elif field.type.is_list and field.type.member.is_simple:
-            _py('        buf.write(str(buffer(array(\'%s\', %s))))', field.type.member.py_format_str, _n(field.field_name))
+            _py('        buf.write(array(\'%s\', %s).tostring())', field.type.member.py_format_str, _n(field.field_name))
         else:
             _py('        for elt in xcb.Iterator(%s, %d, \'%s\', True):', _n(field.field_name), field.type.member.py_format_len, _n(field.field_name))
             _py('            buf.write(pack(\'=%s\', *elt))', field.type.member.py_format_str)
@@ -593,9 +633,9 @@ output = {'open'    : py_open,
 # Check for the argument that specifies path to the xcbgen python package.
 try:
     opts, args = getopt.getopt(sys.argv[1:], 'p:')
-except getopt.GetoptError, err:
-    print str(err)
-    print 'Usage: py_client.py [-p path] file.xml'
+except getopt.GetoptError(err):
+    print(str(err))
+    print('Usage: py_client.py [-p path] file.xml')
     sys.exit(1)
 
 for (opt, arg) in opts:
@@ -606,13 +646,14 @@ for (opt, arg) in opts:
 try:
     from xcbgen.state import Module
 except ImportError:
-    print ''
-    print 'Failed to load the xcbgen Python package!'
-    print 'Make sure that xcb/proto installed it on your Python path.'
-    print 'If not, you will need to create a .pth file or define $PYTHONPATH'
-    print 'to extend the path.'
-    print 'Refer to the README file in xcb/proto for more info.'
-    print ''
+    print ('''
+Failed to load the xcbgen Python package!
+Make sure that xcb/proto installed it on your Python path.
+If not, you will need to create a .pth file or define $PYTHONPATH
+to extend the path.
+
+Refer to the README file in xcb/proto for more information.
+''')
     raise
 
 # Parse the xml header

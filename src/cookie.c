@@ -4,6 +4,7 @@
 #include "cookie.h"
 #include "error.h"
 #include "reply.h"
+#include "ext.h"
 
 /*
  * Helpers
@@ -29,7 +30,7 @@ xpybCookie_dealloc(xpybCookie *self)
     Py_CLEAR(self->reply_type);
     Py_CLEAR(self->request);
     Py_CLEAR(self->conn);
-    self->ob_type->tp_free((PyObject *)self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 
@@ -66,9 +67,8 @@ xpybCookie_reply(xpybCookie *self, PyObject *args)
 {
     xcb_generic_error_t *error;
     xcb_generic_reply_t *data;
-    PyObject *shim, *reply;
-    void *buf;
-    Py_ssize_t len;
+    PyObject *memoryview;
+    PyObject *reply;
 
     /* Check arguments and connection. */
     if (self->request->is_void) {
@@ -83,29 +83,20 @@ xpybCookie_reply(xpybCookie *self, PyObject *args)
     if (xpybError_set(self->conn, error))
 	return NULL;
     if (data == NULL) {
-	PyErr_SetString(PyExc_IOError, "I/O error on X server connection.");
+	PyErr_SetString(PyExc_IOError, "Error reading reply from X server connection.");
 	return NULL;
     }
 
-    /* Create a shim protocol object */
-    shim = PyBuffer_New(32 + data->length * 4);
-    if (shim == NULL)
-	goto err1;
-    if (PyObject_AsWriteBuffer(shim, &buf, &len) < 0)
-        goto err2;
-    memcpy(buf, data, len);
-    free(data);
+    memoryview = PyMemoryView_FromMemory((void *) data, 32 + data->length * 4, 'B');
+    // free(data);
+
+    if (memoryview == NULL)
+        return NULL;
 
     /* Call the reply type object to get a new xcb.Reply instance */
-    reply = PyObject_CallFunctionObjArgs((PyObject *)self->reply_type, shim, NULL);
-    Py_DECREF(shim);
+    reply = PyObject_CallFunctionObjArgs((PyObject *)self->reply_type, memoryview, NULL);
+    Py_DECREF(memoryview);
     return reply;
-
-err2:
-    Py_DECREF(shim);
-err1:
-    free(data);
-    return NULL;
 }
 
 static PyMethodDef xpybCookie_methods[] = {

@@ -16,7 +16,7 @@ xpybEvent_create(xpybConn *conn, xcb_generic_event_t *e)
     if (opcode < conn->events_len && conn->events[opcode] != NULL)
 	type = conn->events[opcode];
 
-    shim = PyBuffer_FromMemory(e, sizeof(*e));
+    shim = PyMemoryView_FromMemory((void *) e, sizeof(*e), 'B');
     if (shim == NULL)
 	return NULL;
 
@@ -41,7 +41,7 @@ xpybEvent_create(xpybConn *conn, xcb_generic_event_t *e)
  */
 
 PyTypeObject xpybEvent_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Event",
     .tp_basicsize = sizeof(xpybEvent),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

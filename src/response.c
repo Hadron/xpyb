@@ -16,19 +16,24 @@
  * Members
  */
 
+#if PY_MAJOR_VERSION >= 3
+#define Py_CompareWithASCIIString(obj, s) (PyUnicode_CompareWithASCIIString(obj, s))
+#else
+#define Py_CompareWithASCIIString(obj, s) (strcmp(PyString_AsString(obj), s))
+#endif
+
 static PyObject *
 xpybResponse_getattro(PyObject *self, PyObject *obj)
 {
-    const char *name = PyString_AS_STRING(obj);
     const xcb_generic_event_t *data;
     Py_ssize_t size;
 
     if (PyObject_AsReadBuffer(self, (const void **)&data, &size) < 0)
 	return NULL;
 
-    if (strcmp(name, "response_type") == 0)
+    if (Py_CompareWithASCIIString(obj, "response_type") == 0)
 	return Py_BuildValue("B", data->response_type);
-    if (strcmp(name, "sequence") == 0)
+    if (Py_CompareWithASCIIString(obj, "sequence") == 0)
 	return Py_BuildValue("H", data->sequence);
 
     return xpybResponse_type.tp_base->tp_getattro(self, obj);
@@ -40,7 +45,7 @@ xpybResponse_getattro(PyObject *self, PyObject *obj)
  */
 
 PyTypeObject xpybResponse_type = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "xcb.Response",
     .tp_basicsize = sizeof(xpybResponse),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
