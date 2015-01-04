@@ -1,0 +1,21 @@
+From: Klee Dienes <klee.dienes@hadronindustries.com>
+Date: Sat, 3 Jan 2015 22:58:12 -0500
+Subject: Use bytes for atom names.
+
+---
+ src/py_client.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/py_client.py b/src/py_client.py
+index a47a917..020b88d 100755
+--- a/src/py_client.py
++++ b/src/py_client.py
+@@ -529,7 +529,7 @@ def _py_request_helper(self, name, void, regular):
+         elif field.type.is_pad:
+             _py('        buf.write(pack(\'%sx\'))', field.type.nmemb)
+         elif field.type.is_container:
+-            _py('        for elt in xcb.Iterator(%s, %d, \'%s\', False):', _n(field.field_name), field.type.py_format_len, _n(field.field_name))
++            _py('        for elt in xcb.Iterator(%s, %d, b\'%s\', False):', _n(field.field_name), field.type.py_format_len, _n(field.field_name))
+             _py('            buf.write(pack(\'=%s\', *elt))', field.type.py_format_str)
+         elif field.type.is_list and field.type.member.is_simple:
+             _py('        buf.write(array(\'%s\', %s).tostring())', field.type.member.py_format_str, _n(field.field_name))
